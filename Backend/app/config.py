@@ -4,6 +4,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip(
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:latest")
 
 
+
 def resolve_ollama_model(requested: str, base_url: str = OLLAMA_BASE_URL) -> str:
     """Match requested model to a name Ollama actually has installed."""
     try:

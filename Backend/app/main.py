@@ -5,7 +5,13 @@ from ollama import ResponseError
 
 from app.config import OLLAMA_BASE_URL, OLLAMA_MODEL
 from app.graph import OLLAMA_MODEL_RESOLVED, llm, validation_app
-from app.schemas import HealthResponse, ValidateIdeaRequest, ValidationResponse
+from app.schemas import (
+    HealthResponse,
+    ValidateIdeaRequest,
+    ValidationResponse,
+    ValidationSummary,
+)
+from app.storage import get_validation, init_db, list_validations, save_validation
 
 api = FastAPI(
     title="Validation Engine API",
@@ -21,6 +27,11 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@api.on_event("startup")
+async def startup() -> None:
+    init_db()
 
 
 def _graph_result_to_response(
@@ -89,7 +100,7 @@ async def validate_idea(request: ValidateIdeaRequest) -> ValidationResponse:
             detail=(
                 f"Model '{OLLAMA_MODEL_RESOLVED}' is not installed. "
                 f"Installed models: {installed}. "
-                f"Run: ollama pull {OLLAMA_MODEL or 'llama3.2:latest'}"
+                f"Run: ollama pull {OLLAMA_MODEL or 'llama3.2'}"
             ),
         )
 
@@ -119,7 +130,23 @@ async def validate_idea(request: ValidateIdeaRequest) -> ValidationResponse:
             detail=f"Validation pipeline failed: {exc}",
         ) from exc
 
-    return _graph_result_to_response(request.user_idea, result)
+    response = _graph_result_to_response(request.user_idea, result)
+    return save_validation(response)
+
+
+@api.get("/api/validations", response_model=list[ValidationSummary])
+async def validation_history() -> list[ValidationSummary]:
+    """Return saved validation runs for the sidebar."""
+    return list_validations()
+
+
+@api.get("/api/validations/{validation_id}", response_model=ValidationResponse)
+async def validation_detail(validation_id: str) -> ValidationResponse:
+    """Return one full saved validation run."""
+    validation = get_validation(validation_id)
+    if validation is None:
+        raise HTTPException(status_code=404, detail="Validation not found")
+    return validation
 
 
 # Uvicorn entrypoint: uvicorn app.main:api --reload

@@ -24,10 +24,11 @@ class ValidationEngineState(TypedDict):
 # LLM model (Switch to OpenAI later). Resolved against `ollama list` at import.
 OLLAMA_MODEL_RESOLVED = resolve_ollama_model(OLLAMA_MODEL)
 llm = ChatOllama(
-    model="llama3.2:latest",
-    # base_url=OLLAMA_BASE_URL,
+    model=OLLAMA_MODEL_RESOLVED,
+    base_url=OLLAMA_BASE_URL,
     validate_model_on_init=False,
 )
+
 
 """
 Building the langgraph nodes

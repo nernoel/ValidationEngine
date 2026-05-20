@@ -18,6 +18,8 @@ class ValidateIdeaRequest(BaseModel):
 class ValidationResponse(BaseModel):
     """Full validation result returned after the LangGraph pipeline completes."""
 
+    id: str | None = None
+    title: str | None = None
     user_idea: str
     narrowed_down_idea: str = ""
     pros: str = ""
@@ -26,6 +28,18 @@ class ValidationResponse(BaseModel):
     competitors_list: str = ""
     validation_score: str = ""
     validation_score_reasoning: str = ""
+    created_at: str | None = None
+
+
+class ValidationSummary(BaseModel):
+    """Small validation record used by the sidebar history."""
+
+    id: str
+    title: str
+    user_idea: str
+    validation_score: str = ""
+    difficulty_score: str = ""
+    created_at: str
 
 
 class HealthResponse(BaseModel):
