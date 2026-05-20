@@ -5,62 +5,27 @@ from typing import Literal, TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
-
-
-class ExampleProsCons(TypedDict):
-    name: str
-    pros: list[str]
-    cons: list[str]
-
-
-class ExampleProsConsOutput(BaseModel):
-    name: str = Field(description="Short label for this narrowed-down niche example")
-    pros: list[str] = Field(description="Exactly 5 pros for this niche")
-    cons: list[str] = Field(description="Exactly 5 cons for this niche")
-
-
-class ProsConsOutput(BaseModel):
-    overall_pros: list[str] = Field(description="Exactly 5 pros for the overall refined idea")
-    overall_cons: list[str] = Field(description="Exactly 5 cons for the overall refined idea")
-    examples: list[ExampleProsConsOutput] = Field(
-        description="Pros and cons for each suggested niche from the narrowed-down analysis"
-    )
-
-
-class DifficultyOutput(BaseModel):
-    difficulty: int = Field(ge=1, le=10, description="Difficulty from 1 (easiest) to 10 (hardest)")
-
-
-class CompetitorsOutput(BaseModel):
-    competitors: list[str] = Field(description="Real competitor company names in this market")
-
-
-class ValidationScoreOutput(BaseModel):
-    score: int = Field(ge=1, le=10, description="Validation score from 1 (lowest) to 10 (highest)")
-
 
 class ValidationEngineState(TypedDict):
-    idea: str
-    narrowed_down_ideas: str
+    
+    user_idea: str                       # User's intial idea
+    narrowed_down_ideas: str        # llm narrowed down idea
 
-    pros: list[str]
-    cons: list[str]
-    example_pros_cons: list[ExampleProsCons]
+    pros: list[str]                 # List of pros of the idea
+    cons: list[str]                 # List of cons of the idea
 
-    difficulty: int
-    competitors: list[str]
+    difficulty_score: int           # Difficulty level score of idea
+    competitors_list: list[str]          # List of competitors for the user's idea (real)
 
-    validation_score: int
-    validation_score_reasoning: str
+    validation_score: int           # Validation score, is this a good idea
+    validation_score_reasoning: str # Reasoning from llm for the score
 
-
+# LLM model being user (Switch to OpenAI later)
 llm = ChatOllama(model="llama3.1")
-
 
 def _analysis_context(state: ValidationEngineState) -> str:
     return (
-        f"Original idea:\n{state['idea']}\n\n"
+        f"Original idea:\n{state['user_idea']}\n\n"
         f"Narrowed-down analysis and suggested niches:\n{state['narrowed_down_ideas']}"
     )
 
@@ -72,8 +37,9 @@ def _parse_score_1_10(text: str) -> int:
     return int(match.group(1))
 
 
-# --- Graph nodes ---
-
+"""
+Building the langgraph nodes
+"""
 
 async def validate_idea(state: ValidationEngineState) -> dict:
     """Narrow the user's idea and suggest specific niches."""
@@ -197,7 +163,7 @@ async def compute_validation_score_reasoning(state: ValidationEngineState) -> di
     """Explain why the validation score was assigned."""
     system_prompt = SystemMessage(
         content=(
-            "You are a startup validation analyst. "
+            "You are a idea validation analyst. "
             "Explain in detail why the given validation score is appropriate. "
             "Reference the idea, narrowed-down analysis, pros, cons, difficulty, and competitors. "
             "Do not use conversational filler."
