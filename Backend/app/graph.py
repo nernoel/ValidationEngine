@@ -10,14 +10,14 @@ class ValidationEngineState(TypedDict):
     user_idea: str                       # User's intial idea
     narrowed_down_idea: str              # llm narrowed down idea
 
-    pros: list[str]                 # List of pros of the idea
-    cons: list[str]                 # List of cons of the idea
+    pros: list[str]                     # List of pros of the idea
+    cons: list[str]                     # List of cons of the idea
 
-    difficulty_score: int           # Difficulty level score of idea
+    difficulty_score: int               # Difficulty level score of idea
     competitors_list: list[str]          # List of competitors for the user's idea (real)
 
-    validation_score: int           # Validation score, is this a good idea
-    validation_score_reasoning: str # Reasoning from llm for the score
+    validation_score: int               # Validation score, is this a good idea
+    validation_score_reasoning: str     # Reasoning from llm for the score
 
 # LLM model being user (Switch to OpenAI later)
 llm = ChatOllama(model="llama3.1")
@@ -91,6 +91,7 @@ async def get_difficulty_score(state: ValidationEngineState) -> dict:
     """ Defines a difficulty score based on the user's validated idea"""
     instruction = HumanMessage(
         content=(
+            f"{state['user_idea']}" # Pass in original user idea for extra context
             f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
             f"PROS: {state.get('pros')} CONS: {state.get('cons')}"
             "Using the narrowed down analysis idea and the pros and cons, give a score on difficulty also based on the pros and cons"
@@ -108,6 +109,83 @@ async def get_difficulty_score(state: ValidationEngineState) -> dict:
     response = await llm.ainvoke([system_prompt, instruction])
     return {"difficulty_score": response.content}
 
+async def define_competitors_list(state: ValidationEngineState) -> dict:
+    """Defines real competitors for the user's validated idea."""
+    instruction = HumanMessage(
+        content=(
+            f"Original idea:\n{state.get('user_idea', '')}\n\n"
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            "Using the original idea and narrowed-down analysis above, list real companies "
+            "that already compete in this market. "
+            "List at least 5 competitors if they exist. "
+            "Return only competitor names, one per line."
+        )
+    )
+    system_prompt = SystemMessage(
+        content=(
+            "You are a helpful skilled assistant good at identifying real market competitors. "
+            "Based on the user's idea, list real existing companies that compete in the same space. "
+            "Do not invent fictional companies. "
+            "Do not give examples of anything else or use conversational filler. "
+            "Output only competitor names, one per line."
+        )
+    )
+
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"competitors_list": response.content}
+
+async def get_validation_score(state: ValidationEngineState) -> dict:
+    """Defines an overall validation score for the user's validated idea."""
+    instruction = HumanMessage(
+        content=(
+            f"Original idea:\n{state.get('user_idea', '')}\n\n"
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            f"PROS: {state.get('pros')}\n"
+            f"CONS: {state.get('cons')}\n"
+            f"DIFFICULTY SCORE: {state.get('difficulty_score')}\n"
+            f"COMPETITORS: {state.get('competitors_list')}\n\n"
+            "Using all of the context above, assign one validation score for how strong this idea is. "
+            "The score should be exactly between 1 to 10, 1 being the weakest and 10 being the strongest. "
+            "No filler, just the number itself."
+        )
+    )
+    system_prompt = SystemMessage(
+        content=(
+            "Give a validation score for the validated idea. "
+            "Nothing else should be given here, just give the number and thats it. "
+            "No filler needs to be given here, just the number."
+        )
+    )
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"validation_score": response.content}
+
+async def define_validation_score_reasoning(state: ValidationEngineState) -> dict:
+    """Explains why the validation score was assigned."""
+    instruction = HumanMessage(
+        content=(
+            f"Original idea:\n{state.get('user_idea', '')}\n\n"
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            f"PROS: {state.get('pros')}\n"
+            f"CONS: {state.get('cons')}\n"
+            f"DIFFICULTY SCORE: {state.get('difficulty_score')}\n"
+            f"COMPETITORS: {state.get('competitors_list')}\n"
+            f"VALIDATION SCORE: {state.get('validation_score')}\n\n"
+            "Using all of the context above, explain in detail why the validation score is appropriate. "
+            "Reference the idea, narrowed-down analysis, pros, cons, difficulty, and competitors. "
+            "Do not use conversational filler."
+        )
+    )
+    system_prompt = SystemMessage(
+        content=(
+            "You are a helpful skilled assistant good at explaining startup validation scores. "
+            "Based on the validation score and all prior analysis, explain why that score was given. "
+            "Do not change the score. "
+            "Do not give examples of anything else or use conversational filler."
+        )
+    )
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"validation_score_reasoning": response.content}
+
 """
 Graph visualization
 -> WORKING ON IT....
@@ -120,14 +198,19 @@ graph.add_node("validate_idea_node", validate_idea)
 graph.add_node("define_pros_node", define_pros)
 graph.add_node("define_cons_node", define_cons)
 graph.add_node("get_difficulty_score_node", get_difficulty_score)
+graph.add_node("define_competitors_list_node", define_competitors_list)
+graph.add_node("get_validation_score_node", get_validation_score)
+graph.add_node("define_validation_score_reasoning_node", define_validation_score_reasoning)
 
 # Add graph edges
 graph.add_edge(START, "validate_idea_node")
 graph.add_edge("validate_idea_node", "define_pros_node")
 graph.add_edge("define_pros_node", "define_cons_node")
 graph.add_edge("define_cons_node", "get_difficulty_score_node")
-graph.add_edge("get_difficulty_score_node", END)
-
+graph.add_edge("get_difficulty_score_node", "define_competitors_list_node")
+graph.add_edge("define_competitors_list_node", "get_validation_score_node")
+graph.add_edge("get_validation_score_node", "define_validation_score_reasoning_node")
+graph.add_edge("define_validation_score_reasoning_node", END)
 
 # Compile the graph
 app = graph.compile()
@@ -163,9 +246,25 @@ async def main():
     print("=" * 70)
     print(final_output.get("cons"))
     print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] DIFFICULTY SCORE ---")
+    print("=" * 70)
+    print(final_output.get("difficulty_score"))
 
+    print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] COMPETITORS LIST ---")
+    print("=" * 70)
+    print(final_output.get("competitors_list"))
 
-    print("THE DIFFICULTY SCORE IS:" + final_output.get("difficulty_score"))
+    print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] VALIDATION SCORE ---")
+    print("=" * 70)
+    print(final_output.get("validation_score"))
+
+    print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] VALIDATION SCORE REASONING ---")
+    print("=" * 70)
+    print(final_output.get("validation_score_reasoning"))
+    print("\n" + "=" * 70)
 
 if __name__ == "__main__":
     asyncio.run(main())
