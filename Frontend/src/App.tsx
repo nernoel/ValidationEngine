@@ -286,7 +286,7 @@ function App() {
                       <p className="mt-0.5 text-sm text-slate-400">Describe the concept in plain English.</p>
                     </div>
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-600">
-                      Ollama active
+                      System is currently active
                     </span>
                   </div>
                 </div>
