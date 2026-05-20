@@ -20,7 +20,7 @@ class ValidationEngineState(TypedDict):
     validation_score_reasoning: str     # Reasoning from llm for the score
 
 # LLM model being user (Switch to OpenAI later)
-llm = ChatOllama(model="llama3.1")
+llm = ChatOllama(model="llama3.2")
 
 """
 Building the langgraph nodes
@@ -50,16 +50,16 @@ async def define_pros(state: ValidationEngineState) -> dict:
     instruction = HumanMessage(
         content=(
             f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
-            "Using the narrowed-down analysis above, list exactly 5 pros for the overall refined idea. "
-            "For each distinct niche suggested in the analysis, list exactly 5 pros for that niche."
+            "List exactly 5 pros for the overall refined idea only. "
+            "Do not list pros per niche or sub-category."
         )
     )
     system_prompt = SystemMessage(
         content=(
             "You are a helpful skilled assistant good at identifying pros for ideas. "
-            "Based on the user's idea, give 5 pros to their idea. "
-            "Do not give examples of anything else or use conversational filler. "
-            "Output 5 best things (pros) about the idea."
+            "Output exactly 5 pros for the overall idea only. "
+            "One short line per pro (under 15 words each). "
+            "No headings, no niches, no extra commentary."
         )
     )
 
@@ -71,16 +71,16 @@ async def define_cons(state: ValidationEngineState) -> dict:
     instruction = HumanMessage(
         content=(
             f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
-            "Using the narrowed-down analysis above, list exactly 5 cons for the overall refined idea. "
-            "For each distinct niche suggested in the analysis, list exactly 5 cons for that niche."
+            "List exactly 5 cons for the overall refined idea only. "
+            "Do not list cons per niche or sub-category."
         )
     )
     system_prompt = SystemMessage(
         content=(
             "You are a helpful skilled assistant good at identifying cons for ideas. "
-            "Based on the user's idea, give 5 cons to their idea. "
-            "Do not give examples of anything else or use conversational filler. "
-            "Output 5 worst things (cons) about the idea."
+            "Output exactly 5 cons for the overall idea only. "
+            "One short line per con (under 15 words each). "
+            "No headings, no niches, no extra commentary."
         )
     )
 
@@ -91,12 +91,13 @@ async def get_difficulty_score(state: ValidationEngineState) -> dict:
     """ Defines a difficulty score based on the user's validated idea"""
     instruction = HumanMessage(
         content=(
-            f"{state['user_idea']}" # Pass in original user idea for extra context
+            f"Original idea:\n{state.get('user_idea', '')}\n\n"
             f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
-            f"PROS: {state.get('pros')} CONS: {state.get('cons')}"
-            "Using the narrowed down analysis idea and the pros and cons, give a score on difficulty also based on the pros and cons"
-            "The score should be exactly between 1 to 10 , 1 being the easiest and 10 being the most difficult"
-            "No filler, just the number itself"
+            f"PROS: {state.get('pros')}\n"
+            f"CONS: {state.get('cons')}\n\n"
+            "Using the narrowed down analysis, pros, and cons, give a difficulty score. "
+            "The score should be exactly between 1 to 10, 1 being the easiest and 10 being the most difficult. "
+            "No filler, just the number itself."
         )
     )
     system_prompt = SystemMessage(
@@ -170,17 +171,17 @@ async def define_validation_score_reasoning(state: ValidationEngineState) -> dic
             f"DIFFICULTY SCORE: {state.get('difficulty_score')}\n"
             f"COMPETITORS: {state.get('competitors_list')}\n"
             f"VALIDATION SCORE: {state.get('validation_score')}\n\n"
-            "Using all of the context above, explain in detail why the validation score is appropriate. "
-            "Reference the idea, narrowed-down analysis, pros, cons, difficulty, and competitors. "
-            "Do not use conversational filler."
+            "Give a brief explanation of why the validation score is appropriate. "
+            "Maximum 5 sentences total. Keep it short for a simple UI summary."
         )
     )
     system_prompt = SystemMessage(
         content=(
             "You are a helpful skilled assistant good at explaining startup validation scores. "
-            "Based on the validation score and all prior analysis, explain why that score was given. "
+            "Explain why the score was given in at most 5 short sentences. "
+            "No bullet lists, no headings, no long paragraphs. "
             "Do not change the score. "
-            "Do not give examples of anything else or use conversational filler."
+            "Do not use conversational filler."
         )
     )
     response = await llm.ainvoke([system_prompt, instruction])
