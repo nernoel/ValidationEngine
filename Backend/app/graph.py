@@ -7,9 +7,8 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 
 class ValidationEngineState(TypedDict):
-    
     user_idea: str                       # User's intial idea
-    narrowed_down_ideas: str        # llm narrowed down idea
+    narrowed_down_idea: str              # llm narrowed down idea
 
     pros: list[str]                 # List of pros of the idea
     cons: list[str]                 # List of cons of the idea
@@ -23,316 +22,150 @@ class ValidationEngineState(TypedDict):
 # LLM model being user (Switch to OpenAI later)
 llm = ChatOllama(model="llama3.1")
 
-def _analysis_context(state: ValidationEngineState) -> str:
-    return (
-        f"Original idea:\n{state['user_idea']}\n\n"
-        f"Narrowed-down analysis and suggested niches:\n{state['narrowed_down_ideas']}"
-    )
-
-
-def _parse_score_1_10(text: str) -> int:
-    match = re.search(r"\b(10|[1-9])\b", text.strip())
-    if not match:
-        return 5
-    return int(match.group(1))
-
-
 """
 Building the langgraph nodes
 """
 
 async def validate_idea(state: ValidationEngineState) -> dict:
-    """Narrow the user's idea and suggest specific niches."""
-    user_prompt = HumanMessage(content=f"Here is my business idea: {state['idea']}")
+    """Narrow the user's idea."""
+    instruction = HumanMessage(content=f"Here is my business idea: {state['user_idea']}")
     system_prompt = SystemMessage(
         content=(
-            "You are a helpful assistant skilled at validating startup ideas. "
-            "Based on the user's idea, narrow it down into a more specific niche. "
-            "Describe the refined idea clearly and in detail, and list several highly "
-            "profitable, specific niches to help the user narrow down the idea if it is general. "
+            "You are a helpful assistant skilled at validating startup / business ideas. "
+            "Based on the user's idea, narrow it down into a more specific idea instead of broad. "
+            "Describe the refined idea clearly and in detail, help the user narrow down the idea if it is general. "
             "Do not talk to the user or use conversational filler. "
+            "Do not give examples of the idea such as what they ask for"
             "Analyze the input and output only the necessary analysis."
+            "Give exactly 6 lines of the idea defined nothing less nothing more"
         )
     )
 
-    response = await llm.ainvoke([system_prompt, user_prompt])
-    return {"narrowed_down_ideas": response.content}
+    # Invoke LLM with original response as well
+    response = await llm.ainvoke([system_prompt, instruction]) 
+    return {"narrowed_down_idea": response.content}
 
-
-async def define_pros_and_cons(state: ValidationEngineState) -> dict:
-    """Pros and cons for the overall idea and each suggested niche."""
+async def define_pros(state: ValidationEngineState) -> dict:
+    """Defines the pros to the user's validated idea."""
+    instruction = HumanMessage(
+        content=(
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            "Using the narrowed-down analysis above, list exactly 5 pros for the overall refined idea. "
+            "For each distinct niche suggested in the analysis, list exactly 5 pros for that niche."
+        )
+    )
     system_prompt = SystemMessage(
         content=(
-            "You are a startup validation analyst. "
-            "Using the original idea and the narrowed-down analysis provided, produce balanced pros and cons. "
-            "For the overall refined idea, list exactly 5 pros and exactly 5 cons. "
-            "For each distinct niche or example suggested in the narrowed-down analysis, "
-            "list exactly 5 pros and exactly 5 cons for that niche. "
-            "Base every point on the supplied context; do not invent niches that were not suggested. "
-            "Do not use conversational filler."
+            "You are a helpful skilled assistant good at identifying pros for ideas. "
+            "Based on the user's idea, give 5 pros to their idea. "
+            "Do not give examples of anything else or use conversational filler. "
+            "Output 5 best things (pros) about the idea."
         )
     )
-    user_prompt = HumanMessage(content=_analysis_context(state))
 
-    structured_llm = llm.with_structured_output(ProsConsOutput)
-    result: ProsConsOutput = await structured_llm.ainvoke([system_prompt, user_prompt])
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"pros": response.content}
 
-    return {
-        "pros": result.overall_pros,
-        "cons": result.overall_cons,
-        "example_pros_cons": [
-            {"name": ex.name, "pros": ex.pros, "cons": ex.cons}
-            for ex in result.examples
-        ],
+async def define_cons(state: ValidationEngineState) -> dict:
+    """Defines the cons to the user's validated idea."""
+    instruction = HumanMessage(
+        content=(
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            "Using the narrowed-down analysis above, list exactly 5 cons for the overall refined idea. "
+            "For each distinct niche suggested in the analysis, list exactly 5 cons for that niche."
+        )
+    )
+    system_prompt = SystemMessage(
+        content=(
+            "You are a helpful skilled assistant good at identifying cons for ideas. "
+            "Based on the user's idea, give 5 cons to their idea. "
+            "Do not give examples of anything else or use conversational filler. "
+            "Output 5 worst things (cons) about the idea."
+        )
+    )
+
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"cons": response.content}
+
+async def get_difficulty_score(state: ValidationEngineState) -> dict:
+    """ Defines a difficulty score based on the user's validated idea"""
+    instruction = HumanMessage(
+        content=(
+            f"Narrowed-down analysis:\n{state.get('narrowed_down_idea', '')}\n\n"
+            f"PROS: {state.get('pros')} CONS: {state.get('cons')}"
+            "Using the narrowed down analysis idea and the pros and cons, give a score on difficulty also based on the pros and cons"
+            "The score should be exactly between 1 to 10 , 1 being the easiest and 10 being the most difficult"
+            "No filler, just the number itself"
+        )
+    )
+    system_prompt = SystemMessage(
+        content=(
+            "Give e difficulty score for the  validated idea"
+            "nothing else should be given here just give the number and thats it"
+            "No filler needs to be given here, just the number"
+        )
+    )
+    response = await llm.ainvoke([system_prompt, instruction])
+    return {"difficulty_score": response.content}
+
+"""
+Graph visualization
+-> WORKING ON IT....
+"""
+
+# Create langgraph graph
+graph = StateGraph(ValidationEngineState)
+
+graph.add_node("validate_idea_node", validate_idea)
+graph.add_node("define_pros_node", define_pros)
+graph.add_node("define_cons_node", define_cons)
+graph.add_node("get_difficulty_score_node", get_difficulty_score)
+
+# Add graph edges
+graph.add_edge(START, "validate_idea_node")
+graph.add_edge("validate_idea_node", "define_pros_node")
+graph.add_edge("define_pros_node", "define_cons_node")
+graph.add_edge("define_cons_node", "get_difficulty_score_node")
+graph.add_edge("get_difficulty_score_node", END)
+
+
+# Compile the graph
+app = graph.compile()
+
+
+"""
+Testing the graph functionality along with llm time
+"""
+
+async def main():
+    initial_input = {
+        "user_idea": "A platform where local chefs can rent out restaurant kitchens during their off-hours to host pop-up dining experiences."
     }
+    
+    print("🚀 Running LangGraph Validation Engine...")
+    print(f"User Input: {initial_input['user_idea']}\n")
+    print("Waiting for LLM generation...")
+    print("=" * 70)
+
+    # Execute the graph asynchronously
+    final_output = await app.ainvoke(initial_input)
+
+    print("\n--- [NODE OUTPUT] NARROWED DOWN IDEA ---")
+    print(final_output.get("narrowed_down_idea"))
+
+    print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] PROS ---")
+    print("=" * 70)
+    print(final_output.get("pros"))
+
+    print("\n" + "=" * 70)
+    print("--- [NODE OUTPUT] CONS ---")
+    print("=" * 70)
+    print(final_output.get("cons"))
+    print("\n" + "=" * 70)
 
 
-async def define_difficulty(state: ValidationEngineState) -> dict:
-    """Difficulty score from 1 (easiest) to 10 (hardest)."""
-    system_prompt = SystemMessage(
-        content=(
-            "You are a startup validation analyst. "
-            "Using the original idea and the narrowed-down analysis, assign a single difficulty score "
-            "from 1 (easiest to execute) to 10 (hardest). "
-            "Base the score only on the supplied context."
-        )
-    )
-    user_prompt = HumanMessage(content=_analysis_context(state))
-
-    structured_llm = llm.with_structured_output(DifficultyOutput)
-    try:
-        result: DifficultyOutput = await structured_llm.ainvoke([system_prompt, user_prompt])
-        return {"difficulty": result.difficulty}
-    except Exception:
-        response = await llm.ainvoke([system_prompt, user_prompt])
-        return {"difficulty": _parse_score_1_10(response.content)}
-
-
-async def define_competitors(state: ValidationEngineState) -> dict:
-    """List of real competitors in the market."""
-    system_prompt = SystemMessage(
-        content=(
-            "You are a startup validation analyst. "
-            "Using the original idea and the narrowed-down analysis, list real companies "
-            "that already compete in this space. "
-            "Return only competitor names; no other commentary."
-        )
-    )
-    user_prompt = HumanMessage(content=_analysis_context(state))
-
-    structured_llm = llm.with_structured_output(CompetitorsOutput)
-    try:
-        result: CompetitorsOutput = await structured_llm.ainvoke([system_prompt, user_prompt])
-        return {"competitors": result.competitors}
-    except Exception:
-        response = await llm.ainvoke([system_prompt, user_prompt])
-        names = [line.strip("-• ").strip() for line in response.content.splitlines() if line.strip()]
-        return {"competitors": names}
-
-
-async def compute_validation_score(state: ValidationEngineState) -> dict:
-    """Overall validation score from 1 to 10 using full prior analysis."""
-    system_prompt = SystemMessage(
-        content=(
-            "You are a startup validation analyst. "
-            "Using the original idea, narrowed-down analysis, pros, cons, difficulty, and competitors, "
-            "assign one validation score from 1 (lowest) to 10 (highest). "
-            "Return only the numeric score."
-        )
-    )
-    user_prompt = HumanMessage(
-        content=(
-            f"{_analysis_context(state)}\n\n"
-            f"Pros: {state.get('pros', [])}\n"
-            f"Cons: {state.get('cons', [])}\n"
-            f"Difficulty (1-10): {state.get('difficulty', 0)}\n"
-            f"Competitors: {state.get('competitors', [])}"
-        )
-    )
-
-    structured_llm = llm.with_structured_output(ValidationScoreOutput)
-    try:
-        result: ValidationScoreOutput = await structured_llm.ainvoke([system_prompt, user_prompt])
-        return {"validation_score": result.score}
-    except Exception:
-        response = await llm.ainvoke([system_prompt, user_prompt])
-        return {"validation_score": _parse_score_1_10(response.content)}
-
-
-async def compute_validation_score_reasoning(state: ValidationEngineState) -> dict:
-    """Explain why the validation score was assigned."""
-    system_prompt = SystemMessage(
-        content=(
-            "You are a idea validation analyst. "
-            "Explain in detail why the given validation score is appropriate. "
-            "Reference the idea, narrowed-down analysis, pros, cons, difficulty, and competitors. "
-            "Do not use conversational filler."
-        )
-    )
-    user_prompt = HumanMessage(
-        content=(
-            f"Validation score: {state['validation_score']}\n\n"
-            f"{_analysis_context(state)}\n\n"
-            f"Pros: {state.get('pros', [])}\n"
-            f"Cons: {state.get('cons', [])}\n"
-            f"Difficulty (1-10): {state.get('difficulty', 0)}\n"
-            f"Competitors: {state.get('competitors', [])}"
-        )
-    )
-
-    response = await llm.ainvoke([system_prompt, user_prompt])
-    return {"validation_score_reasoning": response.content}
-
-
-# --- Routing (conditional / "maybe" edges) ---
-
-
-def route_after_validate(
-    state: ValidationEngineState,
-) -> Literal["__end__"] | list[str]:
-    """
-    Conditional edge after validate_idea.
-    If narrowing failed (empty output), skip the rest of the pipeline.
-    Otherwise fan out to parallel analysis nodes (return a list of node names).
-    """
-    if not state.get("narrowed_down_ideas", "").strip():
-        return "__end__"
-    return [
-        "define_pros_and_cons",
-        "define_difficulty",
-        "define_competitors",
-    ]
-
-
-def route_after_score(
-    state: ValidationEngineState,
-) -> Literal["explain_score", "__end__"]:
-    """
-    Optional follow-up: only generate reasoning when a valid score exists.
-    Acts as a 'maybe' node — reasoning runs only when scoring succeeded.
-    """
-    score = state.get("validation_score", 0)
-    if not isinstance(score, int) or score < 1 or score > 10:
-        return "__end__"
-    return "explain_score"
-
-
-def build_validation_graph() -> StateGraph:
-    """
-    Validation pipeline:
-
-        START
-          │
-          ▼
-      validate_idea
-          │
-          ├─[empty analysis]──► END
-          │
-          └─[has analysis]──► ┌─ define_pros_and_cons ─┐
-                              ├─ define_difficulty ──────┼─► compute_validation_score
-                              └─ define_competitors ─────┘         │
-                                                                   ├─[invalid score]──► END
-                                                                   └─[valid score]────► compute_validation_score_reasoning ─► END
-
-    The three analysis nodes after validate_idea run in parallel (fan-out / join).
-  """
-    workflow = StateGraph(ValidationEngineState)
-
-    workflow.add_node("validate_idea", validate_idea)
-    workflow.add_node("define_pros_and_cons", define_pros_and_cons)
-    workflow.add_node("define_difficulty", define_difficulty)
-    workflow.add_node("define_competitors", define_competitors)
-    workflow.add_node("compute_validation_score", compute_validation_score)
-    workflow.add_node(
-        "compute_validation_score_reasoning",
-        compute_validation_score_reasoning,
-    )
-
-    workflow.add_edge(START, "validate_idea")
-
-    # Conditional: continue only if narrowing produced content (list = parallel fan-out)
-    workflow.add_conditional_edges("validate_idea", route_after_validate)
-
-    # Parallel branches join here (waits for all three parents)
-    workflow.add_edge("define_pros_and_cons", "compute_validation_score")
-    workflow.add_edge("define_difficulty", "compute_validation_score")
-    workflow.add_edge("define_competitors", "compute_validation_score")
-
-    # Conditional: maybe skip reasoning if score is missing/invalid
-    workflow.add_conditional_edges(
-        "compute_validation_score",
-        route_after_score,
-        {
-            "explain_score": "compute_validation_score_reasoning",
-            "__end__": END,
-        },
-    )
-
-    workflow.add_edge("compute_validation_score_reasoning", END)
-
-    return workflow
-
-
-# Compiled graph — use validation_app.ainvoke(initial_state) from FastAPI or scripts
-validation_graph = build_validation_graph()
-validation_app = validation_graph.compile()
-
-
-def create_initial_state(idea: str) -> ValidationEngineState:
-    return {
-        "idea": idea,
-        "narrowed_down_ideas": "",
-        "pros": [],
-        "cons": [],
-        "example_pros_cons": [],
-        "difficulty": 0,
-        "competitors": [],
-        "validation_score": 0,
-        "validation_score_reasoning": "",
-    }
-
-
-def print_validation_result(result: ValidationEngineState) -> None:
-    print("\nNARROWED DOWN IDEAS:\n")
-    print(result["narrowed_down_ideas"] or "(none — pipeline ended early)")
-
-    if not result["pros"] and not result["cons"]:
-        return
-
-    print("\nOVERALL PROS:\n")
-    for pro in result["pros"]:
-        print(f"- {pro}")
-
-    print("\nOVERALL CONS:\n")
-    for con in result["cons"]:
-        print(f"- {con}")
-
-    print("\nPER-EXAMPLE PROS & CONS:\n")
-    for example in result["example_pros_cons"]:
-        print(f"\n{example['name']}:")
-        print("  Pros:")
-        for pro in example["pros"]:
-            print(f"    - {pro}")
-        print("  Cons:")
-        for con in example["cons"]:
-            print(f"    - {con}")
-
-    print(f"\nDIFFICULTY: {result['difficulty']}/10")
-    print("\nCOMPETITORS:\n")
-    for competitor in result["competitors"]:
-        print(f"- {competitor}")
-
-    print(f"\nVALIDATION SCORE: {result['validation_score']}/10")
-    if result["validation_score_reasoning"]:
-        print("\nVALIDATION SCORE REASONING:\n")
-        print(result["validation_score_reasoning"])
-
-
-async def main() -> None:
-    state = create_initial_state("AI dog walking application")
-    result = await validation_app.ainvoke(state)
-    print_validation_result(result)
-
+    print("THE DIFFICULTY SCORE IS:" + final_output.get("difficulty_score"))
 
 if __name__ == "__main__":
     asyncio.run(main())
