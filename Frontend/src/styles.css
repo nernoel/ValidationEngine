@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color: #f4f4f5;
+    background: #111318;
+    font-family:
+      "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+
+  button,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .editor-grid {
+    background-image:
+      linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .editor-grid-dark {
+    background-image:
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 28rem),
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: auto, 34px 34px, 34px 34px;
+  }
+}
