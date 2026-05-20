@@ -6,6 +6,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 
+from app.config import OLLAMA_BASE_URL, OLLAMA_MODEL, resolve_ollama_model
+
 class ValidationEngineState(TypedDict):
     user_idea: str                       # User's intial idea
     narrowed_down_idea: str              # llm narrowed down idea
@@ -19,8 +21,13 @@ class ValidationEngineState(TypedDict):
     validation_score: int               # Validation score, is this a good idea
     validation_score_reasoning: str     # Reasoning from llm for the score
 
-# LLM model being user (Switch to OpenAI later)
-llm = ChatOllama(model="llama3.2")
+# LLM model (Switch to OpenAI later). Resolved against `ollama list` at import.
+OLLAMA_MODEL_RESOLVED = resolve_ollama_model(OLLAMA_MODEL)
+llm = ChatOllama(
+    model=OLLAMA_MODEL_RESOLVED,
+    base_url=OLLAMA_BASE_URL,
+    validate_model_on_init=False,
+)
 
 """
 Building the langgraph nodes
@@ -213,8 +220,8 @@ graph.add_edge("define_competitors_list_node", "get_validation_score_node")
 graph.add_edge("get_validation_score_node", "define_validation_score_reasoning_node")
 graph.add_edge("define_validation_score_reasoning_node", END)
 
-# Compile the graph
-app = graph.compile()
+# Compile the graph (validation_app — FastAPI uses `app` in main.py)
+validation_app = graph.compile()
 
 
 """
@@ -232,7 +239,7 @@ async def main():
     print("=" * 70)
 
     # Execute the graph asynchronously
-    final_output = await app.ainvoke(initial_input)
+    final_output = await validation_app.ainvoke(initial_input)
 
     print("\n--- [NODE OUTPUT] NARROWED DOWN IDEA ---")
     print(final_output.get("narrowed_down_idea"))
