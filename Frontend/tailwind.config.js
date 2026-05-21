@@ -3,6 +3,10 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        mono: ["Roboto Mono", "SFMono-Regular", "Menlo", "monospace"]
+      },
       colors: {
         ink: "#06080f",
         panel: "#0d111c",

@@ -11,7 +11,13 @@ from app.schemas import (
     ValidationResponse,
     ValidationSummary,
 )
-from app.storage import get_validation, init_db, list_validations, save_validation
+from app.storage import (
+    delete_validation,
+    get_validation,
+    init_db,
+    list_validations,
+    save_validation,
+)
 
 api = FastAPI(
     title="Validation Engine API",
@@ -147,6 +153,13 @@ async def validation_detail(validation_id: str) -> ValidationResponse:
     if validation is None:
         raise HTTPException(status_code=404, detail="Validation not found")
     return validation
+
+
+@api.delete("/api/validations/{validation_id}", status_code=204)
+async def remove_validation(validation_id: str) -> None:
+    deleted = delete_validation(validation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Validation not found")
 
 
 # Uvicorn entrypoint: uvicorn app.main:api --reload

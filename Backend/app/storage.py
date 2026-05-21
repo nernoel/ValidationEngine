@@ -129,3 +129,17 @@ def get_validation(validation_id: str) -> ValidationResponse | None:
     if row is None:
         return None
     return ValidationResponse(**row)
+
+
+def delete_validation(validation_id: str) -> bool:
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM validations
+            WHERE id = ?
+            """,
+            (validation_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
