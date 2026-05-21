@@ -1,6 +1,13 @@
-# Validation Engine
+# 🧠 An Idea Validation Engine
 
-Validation Engine is a local-first AI application for evaluating early-stage business or product ideas. The app takes a user-submitted idea, runs it through a LangGraph/Ollama validation pipeline, and returns a structured business analysis including a refined value proposition, pros, cons, competitors, validation score, and execution difficulty score.
+## Screenshots
+<img width="1759" height="778" alt="Screenshot 2026-05-21 at 11 16 22 AM" src="https://github.com/user-attachments/assets/94a78676-2be4-402a-86dc-3ff2215145f6" />
+<img width="1774" height="1018" alt="Screenshot 2026-05-21 at 11 16 37 AM" src="https://github.com/user-attachments/assets/47c1ae54-4c1e-4f04-a2f4-0a7c4a738596" />
+<img width="1773" height="1021" alt="Screenshot 2026-05-21 at 11 16 42 AM" src="https://github.com/user-attachments/assets/db8c1232-24b7-45c9-b180-a882433e002b" />
+<img width="1766" height="1025" alt="Screenshot 2026-05-21 at 11 16 51 AM" src="https://github.com/user-attachments/assets/2348a300-06e2-4179-9a2e-5e953624635d" />
+<img width="1763" height="745" alt="Screenshot 2026-05-21 at 11 16 14 AM" src="https://github.com/user-attachments/assets/1ecbf964-ea5a-4279-8171-dbdf594ad78c" />
+
+The idea validator is a AI application for evaluating early-stage business or product ideas. The app takes a user submitted idea, runs it through a LangGraph/Ollama validation pipeline, and returns a structured business analysis including a refined value proposition, pros, cons, competitors, validation score, and execution difficulty score.
 
 The project is built as a two-service local development app:
 
